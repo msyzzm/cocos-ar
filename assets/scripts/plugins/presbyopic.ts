@@ -3,7 +3,7 @@ import * as ColorSeperate from './colorSeperate.js';
 import * as ContentFeature from './contentFeature.js';
 import * as Utils from './utils.js';
 
-enum FeatureMethod{
+export enum FeatureMethod{
     AverageHash = "average hash",
     PerceptualHash = "perceive hash",
     ColorSeperate = "color seperate",
