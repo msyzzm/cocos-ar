@@ -10,7 +10,6 @@
 
 const { ccclass, property } = cc._decorator;
 import Presbyopic, { FeatureMethod } from './plugins/presbyopic';
-import { resolve } from 'dns';
 
 const widthLimit = 320;
 
@@ -28,7 +27,6 @@ export default class Test extends cc.Component {
 
     @property({ type: cc.Texture2D })
     textures: cc.Texture2D[] = [];
-    cameraTexture: cc.Texture2D;
     cameraImageData: {
         data: Uint8ClampedArray,
         width: number,
@@ -36,7 +34,7 @@ export default class Test extends cc.Component {
     };
 
     compareTimer: number;
-    compareTimerDis = 10;
+    compareTimerDis = 5;
     imgWidth: 8;
     zoneAmount: '4';
 
@@ -56,7 +54,6 @@ export default class Test extends cc.Component {
         }
 
         // 相机图替代图
-        this.cameraTexture = this.textures[1];
         var texture = this.textures[1];
         var size = cc.size(texture.width, texture.height);
         this.cameraSprite.getComponent(cc.Sprite).spriteFrame = new cc.SpriteFrame(texture, new cc.Rect(0, 0, size.width, size.height), false, cc.Vec2.ZERO, size);
@@ -64,26 +61,6 @@ export default class Test extends cc.Component {
             this.cameraSprite.width = widthLimit;
             this.cameraSprite.height = size.height / size.width * widthLimit;
         }
-
-        var rTexture = new cc.RenderTexture();
-        rTexture.initWithElement(texture.getHtmlElementObj());
-        var data = this.createQuadData(rTexture.width,rTexture.height);
-        rTexture.readPixels(data);
-        // this.cameraImageData = {
-        //     data: new Uint8ClampedArray(data.buffer),
-        //     width: rTexture.width,
-        //     height: rTexture.height,
-        // }
-
-        var canvas = document.createElement('canvas');
-        var ctx = canvas.getContext('2d');
-        canvas.width = texture.width;
-        canvas.height = texture.height;
-        // ctx.drawImage(texture.getHtmlElementObj(),0,0);
-        // var imagedata = ctx.getImageData(0,0,texture.width,texture.height);
-        var imagedata = ctx.createImageData(texture.width,texture.height);
-        imagedata.data.set(data);
-        this.cameraImageData = imagedata;
 
         // 是否微信小游戏
         if (cc.sys.platform === cc.sys.WECHAT_GAME) {
@@ -110,13 +87,13 @@ export default class Test extends cc.Component {
         }
     }
 
-    // update(dt){
-    //     this.compareTimer-=dt;
-    //     if(this.compareTimer<=0){
-    //         this.compareTimer = this.compareTimerDis;
-    //         this.compare().then(cc.log);
-    //     }
-    // }
+    update(dt){
+        this.compareTimer-=dt;
+        if(this.compareTimer<=0){
+            this.compareTimer = this.compareTimerDis;
+            this.compare();
+        }
+    }
 
     onCameraFrame(res) {
         // 渲染相机图
@@ -126,9 +103,9 @@ export default class Test extends cc.Component {
             height: res.height,
         };
         let size = cc.size(res.width, res.height);
-        this.cameraTexture = new cc.Texture2D();
-        this.cameraTexture.initWithData(res.data, cc.Texture2D.PixelFormat.RGBA8888, size.width, size.height);
-        this.cameraSprite.getComponent(cc.Sprite).spriteFrame = new cc.SpriteFrame(this.cameraTexture, new cc.Rect(0, 0, size.width, size.height), false, cc.Vec2.ZERO, size)
+        var cameraTexture = new cc.Texture2D();
+        cameraTexture.initWithData(res.data, cc.Texture2D.PixelFormat.RGBA8888, size.width, size.height);
+        this.cameraSprite.getComponent(cc.Sprite).spriteFrame = new cc.SpriteFrame(cameraTexture, new cc.Rect(0, 0, size.width, size.height), false, cc.Vec2.ZERO, size)
         if (size.width > widthLimit) {
             this.cameraSprite.width = widthLimit;
             this.cameraSprite.height = size.height / size.width * widthLimit;
@@ -139,38 +116,63 @@ export default class Test extends cc.Component {
     async compare() {
         cc.log('compare start');
 
-        const targetResult = await new Presbyopic({
+        var targetResult = await new Presbyopic({
             imgSrc: this.textures[0].getHtmlElementObj().id,
             imgWidth: this.imgWidth,
-        }).colorSeperate();
-
+        }).getHash();
+        cc.log(targetResult);
+        
+        if(this.cameraImageData === undefined){
+            var texture = this.textures[1];
+            var image = texture.getHtmlElementObj();
+            if(cc.sys.platform === cc.sys.WECHAT_GAME){
+                image = await this.wxLoadSrc(image);
+            }
+            cc.log(image);
+            var canvas = document.createElement('canvas');
+            canvas.width = texture.width;
+            canvas.height = texture.height;
+            var ctx = canvas.getContext('2d');
+            ctx.drawImage(image,0,0);
+            this.cameraImageData = ctx.getImageData(0,0,texture.width,texture.height);
+        }
+        
         var canvas = document.createElement('canvas');
-        var ctx = canvas.getContext('2d');
         canvas.width = this.cameraImageData.width;
         canvas.height = this.cameraImageData.height;
-        ctx.putImageData(this.cameraImageData,0,0);
-
+        var ctx = canvas.getContext('2d');
+        var imageData = ctx.createImageData(this.cameraImageData.width,this.cameraImageData.height);
+        imageData.data.set(this.cameraImageData.data);
+        ctx.putImageData(imageData,0,0);
 
         let size = cc.size(this.cameraImageData.width, this.cameraImageData.height);
         var compareTexture = new cc.Texture2D();
         compareTexture.initWithElement(canvas);
-        this.compareSprite.getComponent(cc.Sprite).spriteFrame = new cc.SpriteFrame(this.cameraTexture, new cc.Rect(0, 0, size.width, size.height), false, cc.Vec2.ZERO, size)
+        this.compareSprite.getComponent(cc.Sprite).spriteFrame = new cc.SpriteFrame(compareTexture, new cc.Rect(0, 0, size.width, size.height), false, cc.Vec2.ZERO, size)
         if (size.width > widthLimit) {
             this.cameraSprite.width = widthLimit;
             this.cameraSprite.height = size.height / size.width * widthLimit;
         }
 
         var src = await this.getSrc(canvas);
-        console.log(src);
-
-        const cameraResult = await new Presbyopic({
+        var cameraResult = await new Presbyopic({
             imgSrc: src,
             imgWidth: this.imgWidth,
-        }).colorSeperate();
+        }).getHash();
+        cc.log(cameraResult);
         // 显示结果
-        this.resultLaber.string = JSON.stringify(Presbyopic.compareFingerprint(targetResult.fingerprint, cameraResult.fingerprint, FeatureMethod.ColorSeperate), null, 2);
+        this.resultLaber.string = JSON.stringify(Presbyopic.compareFingerprint(targetResult.fingerprint, cameraResult.fingerprint, FeatureMethod.PerceptualHash), null, 2);
 
         cc.log('compare complete');
+    }
+
+    async wxLoadSrc(image): Promise<HTMLImageElement>{
+        return new Promise(function(resolve,reject){
+            image.src = image.id;
+            image.onload = function(){
+                resolve(image);
+            }
+        })
     }
 
     async getSrc(canvas): Promise<string>{
@@ -180,13 +182,13 @@ export default class Test extends cc.Component {
                 canvas.toTempFilePath({
                     success: function(res){
                         src = res.tempFilePath;
-                        wx.setClipboardData({
-                            data: src,
-                            success(res) {
-                                console.log(res) // data
-                                resolve(src);
-                            }
-                        });
+                        console.log(res) // data
+                        resolve(src);
+                        // wx.setClipboardData({
+                        //     data: src,
+                        //     success(res) {
+                        //     }
+                        // });
                     }
                 });
             }else{
@@ -213,60 +215,5 @@ export default class Test extends cc.Component {
         //     }
         // }
         return data;
-    }
-
-    createImageData(texture: cc.Texture2D, arrayBuffer: ArrayBuffer, width: number, height: number): ImageData {
-        if (cc.sys.platform === cc.sys.WECHAT_GAME) {
-            return this.wxCreateImageData(texture, width, height);
-        }
-        else {
-            return new ImageData(new Uint8ClampedArray(arrayBuffer), width, height);
-        }
-    }
-
-    wxCreateImageData(texture: cc.Texture2D, width: number, height: number): ImageData {
-        var canvas: HTMLCanvasElement = wx.createCanvas();
-        canvas.width = width;
-        canvas.height = height;
-        var ctx = canvas.getContext('2d');
-        ctx.drawImage(texture.getHtmlElementObj(), 0, 0);
-        var imageData = ctx.getImageData(0, 0, width, height);
-        return imageData;
-    }
-
-    save(buff) {
-        var data = new Uint8Array(buff);
-        var blob = new Blob([data]);
-        var url = window.URL.createObjectURL(blob);
-        return url;
-    }
-
-    // public method for encoding an Uint8Array to base64
-    arrayBufferToBase64(input) {
-        input = new Uint8Array(input);
-        var keyStr = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
-        var output = "";
-        var chr1, chr2, chr3, enc1, enc2, enc3, enc4;
-        var i = 0;
-
-        while (i < input.length) {
-            chr1 = input[i++];
-            chr2 = i < input.length ? input[i++] : Number.NaN; // Not sure if the index 
-            chr3 = i < input.length ? input[i++] : Number.NaN; // checks are needed here
-
-            enc1 = chr1 >> 2;
-            enc2 = ((chr1 & 3) << 4) | (chr2 >> 4);
-            enc3 = ((chr2 & 15) << 2) | (chr3 >> 6);
-            enc4 = chr3 & 63;
-
-            if (isNaN(chr2)) {
-                enc3 = enc4 = 64;
-            } else if (isNaN(chr3)) {
-                enc4 = 64;
-            }
-            output += keyStr.charAt(enc1) + keyStr.charAt(enc2) +
-                keyStr.charAt(enc3) + keyStr.charAt(enc4);
-        }
-        return output;
     }
 }
